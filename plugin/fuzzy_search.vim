@@ -9,19 +9,19 @@ if exists('g:loaded_fuzzy_search')
 endif
 g:loaded_fuzzy_seach = 1
 
-# Define a key bind for opening the fuzzy search.
+# define a key bind for opening the fuzzy search
 if !hasmapto('<Plug>FuzzySearchOpen;')
     map <unique> <Leader>a <Plug>FuzzySearchOpen;
 endif
 
-# Define a map for opening the fuzzy search and a menu entry.
+# define a map for opening the fuzzy search and a menu entry
 if !hasmapto('<SID>Open')
     noremap <unique> <script> <Plug>FuzzySearchOpen; <SID>Open
     noremenu <script> Plugin.Open\ Fuzzy <SID>Open
     noremap <SID>Open :call <SID>Open()<CR>
 endif
 
-# When the fuzzy selection is re-entered, the old directory is shown.
+# when the fuzzy selection is re-entered, the old directory is shown
 var current_fuzzy_directory = getcwd()
 
 # default highlight groups
@@ -45,30 +45,27 @@ def ListFiles(directory: string): list<string>
     return files
 enddef
 
-# Go to the item with given, this does not move the cursor but only the
-# highlight.
-def GoToItem(a_item: number)
-    var item = a_item
-    # Cap the item index
-    if item < 0
-        item = 0
-    endif
-
-    if item >= line('$') - 1
-        item = line('$') - 2
-    endif
-
-    # Highlight the next selected item
-    b:selected_item = item
-    matchdelete(b:selected_item_highlight)
-    b:selected_item_highlight = matchadd('FuzzySearchItem', '\%' .. (b:selected_item + 2) .. 'l')
-enddef
-
 # Move the cursor to the given line
 def GoToLine(line: number)
     var cursor = getpos('.')
     cursor[1] = line
     setpos('.', cursor)
+enddef
+
+# Go to the item with given index (only in normal mode).
+def GoToItem(a_item: number)
+    var item = a_item
+    # Cap the item index
+    if item < 0
+        item = 0
+    elseif item >= line('$') - 1
+        item = max([ 0, line('$') - 2 ])
+    endif
+
+    # highlight the next selected item
+    b:selected_item = item
+    matchdelete(b:selected_item_highlight)
+    b:selected_item_highlight = matchadd('FuzzySearchItem', '\%' .. (item + 2) .. 'l')
 enddef
 
 # Refilter all files and update the buffer.
@@ -82,11 +79,17 @@ def UpdateFileList()
         filtered_files = matchfuzzy(b:files, query)
     endif
 
+    var old_line_count = line('$')
+
     # efficiently replace the lines with the new file names
     setline(2, filtered_files)
     deletebufline('', len(filtered_files) + 2, line('$') + 1)
-    # go back to the first item
-    GoToItem(0)
+
+    if old_line_count != line('$') || b:old_query != query
+        GoToItem(0)
+    endif
+
+    b:old_query = query
 enddef
 
 # Move into the given directory.
@@ -164,22 +167,23 @@ def Open(initial_directory: string = current_fuzzy_directory)
     setlocal nobuflisted
     setlocal noswapfile
 
-    # set initial the "title"
-    execute('file ' .. current_fuzzy_directory)
+    # set the initial "title"
+    execute('file ' .. initial_directory)
 
     # setup variables within the buffer
     b:previous_buffer = previous_buffer
     b:selected_item = 0
-    b:origin_directory = current_fuzzy_directory
+    b:origin_directory = initial_directory
     b:files = files
+    b:old_query = ""
 
     # add the initial file names
     append(1, files)
 
     inoremap <buffer> <silent> / <C-O>:call <SID>OpenNextDirectory()<CR>
     inoremap <buffer> <silent> <CR> <C-O>:call <SID>OpenSelectedFile()<CR>
-    inoremap <buffer> <silent> <Up> <C-O>:call <SID>GoToItem(b:selected_item - 1)<CR>
-    inoremap <buffer> <silent> <Down> <C-O>:call <SID>GoToItem(b:selected_item + 1)<CR>
+    inoremap <buffer> <silent> <Up> <Esc><Up>
+    inoremap <buffer> <silent> <Down> <Esc><Down>
 
     nnoremap <buffer> <silent> <CR> :call <SID>OpenSelectedFile()<CR>
     # when pressing ESC in normal mode return to the old buffer (cancel operation)
@@ -193,8 +197,8 @@ def Open(initial_directory: string = current_fuzzy_directory)
     autocmd InsertEnter <buffer> GoToLine(1) | v:char = ' '
     autocmd InsertLeave <buffer> GoToLine(b:selected_item + 2)
 
-    # whenever the cursor is moved insert moved, follow it with the selected
-    # item
+    # whenever the cursor is moved in normal mode, make the selected item
+    # follow it
     autocmd CursorMoved <buffer> GoToItem(getpos('.')[1] - 2)
 
     # when any text is changed (usually the top query, buf also to clean up any
@@ -208,7 +212,7 @@ def Open(initial_directory: string = current_fuzzy_directory)
     startinsert
 enddef
 
-# Make a command for calling the `Open()` function.
+# make a command for calling the `Open()` function
 if !exists(":FuzzySearch")
-    command -nargs=0 FuzzySearch call Open()
+    command -nargs=? FuzzySearch call Open(<args>)
 endif
