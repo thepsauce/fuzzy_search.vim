@@ -1,0 +1,14 @@
+*fuzzy_search.txt*  Plugin for opening a fuzzy search
+
+This plugin provides a command that opens a fuzzy search window in the current
+buffer and allows to choose a file from this window.
+
+Mappings:
+<Leader>a   or   <Plug>FuzzySearchOpen;
+        Open a fuzzy search buffer in the current window.
+
+Commands:
+:FuzzySearch
+        Open a fuzzy search buffer in the current window.
+
+
